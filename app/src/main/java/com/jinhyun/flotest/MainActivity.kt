@@ -11,7 +11,10 @@ import android.util.Log
 import android.widget.ImageView
 import android.widget.SeekBar
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.*
+import androidx.lifecycle.Observer
 import com.bumptech.glide.Glide
+import com.jinhyun.flotest.databinding.ActivityMainBinding
 import com.jinhyun.flotest.retrofit.JsonPlaceHolder
 import kotlinx.android.synthetic.main.activity_main.*
 import retrofit2.*
@@ -22,7 +25,14 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 import kotlin.collections.ArrayList
 
+const val playing = 1
+const val notplaying = 0
+
 class MainActivity : AppCompatActivity() {
+
+    var binding : ActivityMainBinding? = null
+    var model : SongViewModel? = null
+    var sb : SeekBar? = null
 
     val retrofit = Retrofit.Builder()
         .baseUrl("https://grepp-programmers-challenges.s3.ap-northeast-2.amazonaws.com")
@@ -30,9 +40,6 @@ class MainActivity : AppCompatActivity() {
         .build()
     val service = retrofit.create(JsonPlaceHolder::class.java)
     val TAG = "MainActivity"
-    var mediaPlayer: MediaPlayer? = null
-    var isplaying = false
-    var sb: SeekBar? = null
     val songtime = SimpleDateFormat("mm:ss")
     var timeList = ArrayList<Long>()
     var lyricList = ArrayList<String>()
@@ -41,54 +48,102 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        model = ViewModelProvider(this).get(SongViewModel::class.java)
+        setContentView(binding!!.root)
 
         sb = sb_song
 
+        model!!.mySong.observe(this, Observer<Song> {
+            binding!!.song = it
+        } )
+
+        if (model!!.mySong.value == null) {
+            getSong()
+        }
+
+        sb!!.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+
+            }
+
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    val data = model!!.mySong.value
+                    model!!.mediaPlayer.seekTo(progress)
+                    model!!.mediaPlayer.start()
+                    data!!.condition = playing
+                    model!!.mySong.value = data
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+
+            }
+        })
+
+        iv_startstop.setOnClickListener {
+            val data = model!!.mySong.value
+
+            if (model!!.mySong.value!!.condition == playing) {
+                model!!.mediaPlayer.pause()
+                data!!.condition = notplaying
+            } else if(model!!.mySong.value!!.condition == notplaying){
+                model!!.mediaPlayer.start()
+                data!!.condition = playing
+            }
+
+            model!!.mySong.value = data!!
+        }
+    }
+
+    private fun getSong() {
         service.getSong().enqueue(object : Callback<Song> {
             override fun onResponse(call: Call<Song>, response: Response<Song>) {
                 if (!response.isSuccessful) {
                     Log.d(TAG, "not success : ${response.code()}")
                     return
                 }
+                val mSong = response.body()
 
-                val song = response.body()
+                Log.d(TAG, "song : $mSong")
 
-                Log.d(TAG, "song : $song")
+                initLyric(mSong!!.lyrics)
 
-                tv_title.text = song!!.title
-                tv_singer.text = song.singer
-                tv_album.text = song.album
-                initLyric(song.lyrics)
-
-                val imageView = findViewById<ImageView>(R.id.iv_album)
-
-                Glide.with(applicationContext).load(song.image).into(imageView)
-
-                val url = song.file
-                mediaPlayer = MediaPlayer().apply {
+                val url = mSong.file
+                model!!.mediaPlayer = MediaPlayer().apply {
                     setAudioStreamType(AudioManager.STREAM_MUSIC)
                     setDataSource(url)
                     prepare()
                 }
-                sb!!.max = mediaPlayer!!.duration
-                Log.d(TAG, "duration : ${mediaPlayer!!.duration}")
+                sb!!.max = model!!.mediaPlayer.duration
+                Log.d(TAG, "duration : ${model!!.mediaPlayer.duration}")
 
-                tv_time_end.text = songtime.format(Date(mediaPlayer!!.duration.toLong()))
+                mSong.timeEnd = songtime.format(Date(model!!.mediaPlayer.duration.toLong()))
+                mSong.timeNow = "00:00"
+                mSong.condition = notplaying
+
+                model!!.mySong.value = mSong
 
                 val handler = Handler()
 
                 handler.postDelayed(object : Runnable {
                     override fun run() {
                         try {
-                            sb!!.progress = mediaPlayer!!.currentPosition
+                            sb!!.progress = model!!.mediaPlayer.currentPosition
                             handler.postDelayed(this, 1000)
-                            Log.d(TAG, "media position : ${mediaPlayer!!.currentPosition}")
+                            Log.d(TAG, "media position : ${model!!.mediaPlayer.currentPosition}")
 
-                            tv_time_now.text =
-                                songtime.format(Date(mediaPlayer!!.currentPosition.toLong()))
+                            val data = model!!.mySong.value
 
-                            checkposition(mediaPlayer!!.currentPosition.toLong())
+                            data!!.timeNow =
+                                songtime.format(Date(model!!.mediaPlayer.currentPosition.toLong()))
+
+                            model!!.mySong.value = data
+
+                            Log.d(TAG, "time now : ${model!!.mySong.value!!.timeNow}")
+
+                            checkposition(model!!.mediaPlayer.currentPosition.toLong())
                             changeLyric()
 
                             Log.d(TAG, "position : $position")
@@ -105,35 +160,6 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "failed : ${t.message}")
             }
         })
-
-        sb!!.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-
-            }
-
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    mediaPlayer!!.seekTo(progress)
-                    mediaPlayer!!.start()
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {
-
-            }
-        })
-
-        iv_startstop.setOnClickListener {
-            if (isplaying) {
-                mediaPlayer!!.pause()
-                iv_startstop.setImageResource(R.drawable.ic_play_arrow_black_24dp)
-                isplaying = false
-            } else {
-                mediaPlayer!!.start()
-                iv_startstop.setImageResource(R.drawable.ic_stop_black_24dp)
-                isplaying = true
-            }
-        }
     }
 
     private fun initLyric(lyric : String){
@@ -166,9 +192,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun changeLyric(){
+        val data = model!!.mySong.value
         if(position == 0){
-            tv_lyrics1.text = lyricList[position]
-            tv_lyrics2.text = lyricList[position + 1]
+            data!!.lyric1 = lyricList[position]
+            data.lyric2 = lyricList[position + 1]
 
             tv_lyrics1.setTextColor(ContextCompat.getColor(applicationContext, R.color.transparentGrey))
             tv_lyrics2.setTextColor(ContextCompat.getColor(applicationContext, R.color.transparentGrey))
@@ -176,18 +203,20 @@ class MainActivity : AppCompatActivity() {
             tv_lyrics1.setTypeface(Typeface.DEFAULT)
 
         }else if(position > maxlength){
-            tv_lyrics1.text = lyricList[maxlength]
-            tv_lyrics2.text = ""
+            data!!.lyric1 = lyricList[maxlength]
+            data.lyric2 = ""
 
             tv_lyrics1.setTextColor(ContextCompat.getColor(applicationContext, R.color.Black))
             tv_lyrics1.setTypeface(Typeface.DEFAULT_BOLD)
+
         }else{
-            tv_lyrics1.text = lyricList[position-1]
-            tv_lyrics2.text = lyricList[position]
+            data!!.lyric1 = lyricList[position-1]
+            data.lyric2 = lyricList[position]
 
             tv_lyrics1.setTextColor(ContextCompat.getColor(applicationContext, R.color.Black))
             tv_lyrics1.setTypeface(Typeface.DEFAULT_BOLD)
         }
+        model!!.mySong.value = data!!
     }
 
     private fun checkposition(time : Long) {
