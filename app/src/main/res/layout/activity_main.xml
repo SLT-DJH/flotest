@@ -68,21 +68,30 @@
                 android:textSize="18sp"
                 android:text="@{Song.album}"/>
 
-            <TextView
-                android:id="@+id/tv_lyrics1"
+            <LinearLayout
+                android:id="@+id/LN_lyrics"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@{Song.lyric1}"
-                android:textSize="18sp"
-                android:textColor="@color/transparentGrey"/>
+                android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tv_lyrics2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@{Song.lyric2}"
-                android:textSize="18sp"
-                android:textColor="@color/transparentGrey"/>
+                <TextView
+                    android:id="@+id/tv_lyrics1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@{Song.lyric1}"
+                    android:textSize="18sp"
+                    android:textColor="@color/Black"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/tv_lyrics2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@{Song.lyric2}"
+                    android:textSize="18sp"
+                    android:textColor="@color/transparentGrey"/>
+
+            </LinearLayout>
 
         </LinearLayout>
         <LinearLayout
@@ -97,7 +106,7 @@
             <SeekBar
                 android:id="@+id/sb_song"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"/>
 
             <LinearLayout
                 android:layout_width="match_parent"

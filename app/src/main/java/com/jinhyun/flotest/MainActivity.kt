@@ -1,5 +1,6 @@
 package com.jinhyun.flotest
 
+import android.content.Intent
 import android.graphics.Typeface
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -31,8 +32,7 @@ const val notplaying = 0
 class MainActivity : AppCompatActivity() {
 
     var binding : ActivityMainBinding? = null
-    var model : SongViewModel? = null
-    var sb : SeekBar? = null
+    var songModel : SongViewModel? = null
 
     val retrofit = Retrofit.Builder()
         .baseUrl("https://grepp-programmers-challenges.s3.ap-northeast-2.amazonaws.com")
@@ -43,37 +43,43 @@ class MainActivity : AppCompatActivity() {
     val songtime = SimpleDateFormat("mm:ss")
     var timeList = ArrayList<Long>()
     var lyricList = ArrayList<String>()
-    var position = 0
-    var maxlength = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
-        model = ViewModelProvider(this).get(SongViewModel::class.java)
+        songModel = ViewModelProvider(this).get(SongViewModel::class.java)
         setContentView(binding!!.root)
 
-        sb = sb_song
-
-        model!!.mySong.observe(this, Observer<Song> {
+        songModel!!.mySong.observe(this, Observer<Song> {
             binding!!.song = it
         } )
 
-        if (model!!.mySong.value == null) {
+        songModel!!.max.observe(this, Observer {
+            binding!!.sbSong.max = it
+        })
+
+        songModel!!.progress.observe(this, Observer {
+            binding!!.sbSong.progress = it
+        })
+
+        if (songModel!!.mySong.value == null) {
+            Log.d(TAG, "it's null !")
             getSong()
         }
 
-        sb!!.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        binding!!.sbSong.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
 
             }
 
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    val data = model!!.mySong.value
-                    model!!.mediaPlayer.seekTo(progress)
-                    model!!.mediaPlayer.start()
+                    songModel!!.progress.value = progress
+                    val data = songModel!!.mySong.value
+                    songModel!!.mediaPlayer.seekTo(progress)
+                    songModel!!.mediaPlayer.start()
                     data!!.condition = playing
-                    model!!.mySong.value = data
+                    songModel!!.mySong.value = data
                 }
             }
 
@@ -83,17 +89,21 @@ class MainActivity : AppCompatActivity() {
         })
 
         iv_startstop.setOnClickListener {
-            val data = model!!.mySong.value
+            val data = songModel!!.mySong.value
 
-            if (model!!.mySong.value!!.condition == playing) {
-                model!!.mediaPlayer.pause()
+            if (songModel!!.mySong.value!!.condition == playing) {
+                songModel!!.mediaPlayer.pause()
                 data!!.condition = notplaying
-            } else if(model!!.mySong.value!!.condition == notplaying){
-                model!!.mediaPlayer.start()
+            } else if(songModel!!.mySong.value!!.condition == notplaying){
+                songModel!!.mediaPlayer.start()
                 data!!.condition = playing
             }
 
-            model!!.mySong.value = data!!
+            songModel!!.mySong.value = data!!
+        }
+
+        LN_lyrics.setOnClickListener {
+            goLyric()
         }
     }
 
@@ -111,46 +121,48 @@ class MainActivity : AppCompatActivity() {
                 initLyric(mSong!!.lyrics)
 
                 val url = mSong.file
-                model!!.mediaPlayer = MediaPlayer().apply {
+                songModel!!.mediaPlayer = MediaPlayer().apply {
                     setAudioStreamType(AudioManager.STREAM_MUSIC)
                     setDataSource(url)
                     prepare()
                 }
-                sb!!.max = model!!.mediaPlayer.duration
-                Log.d(TAG, "duration : ${model!!.mediaPlayer.duration}")
+                songModel!!.max.value = songModel!!.mediaPlayer.duration
+                Log.d(TAG, "duration : ${songModel!!.mediaPlayer.duration}")
 
-                mSong.timeEnd = songtime.format(Date(model!!.mediaPlayer.duration.toLong()))
+                mSong.timeEnd = songtime.format(Date(songModel!!.mediaPlayer.duration.toLong()))
                 mSong.timeNow = "00:00"
                 mSong.condition = notplaying
 
-                model!!.mySong.value = mSong
+                songModel!!.mySong.value = mSong
 
                 val handler = Handler()
 
                 handler.postDelayed(object : Runnable {
                     override fun run() {
-                        try {
-                            sb!!.progress = model!!.mediaPlayer.currentPosition
-                            handler.postDelayed(this, 1000)
-                            Log.d(TAG, "media position : ${model!!.mediaPlayer.currentPosition}")
+                            try {
+                                songModel!!.progress.value = songModel!!.mediaPlayer.currentPosition
+                                Log.d(TAG, "seekbar progress : ${songModel!!.progress.value}, max : ${songModel!!.max.value}")
+                                Log.d(TAG, "seekbar check progress: ${sb_song.progress}, seekbar check max : ${sb_song.max}")
+                                handler.postDelayed(this, 1000)
+                                Log.d(TAG, "media position : ${songModel!!.mediaPlayer.currentPosition}")
 
-                            val data = model!!.mySong.value
+                                val data = songModel!!.mySong.value
 
-                            data!!.timeNow =
-                                songtime.format(Date(model!!.mediaPlayer.currentPosition.toLong()))
+                                data!!.timeNow =
+                                    songtime.format(Date(songModel!!.mediaPlayer.currentPosition.toLong()))
 
-                            model!!.mySong.value = data
+                                songModel!!.mySong.value = data
 
-                            Log.d(TAG, "time now : ${model!!.mySong.value!!.timeNow}")
+                                Log.d(TAG, "time now : ${songModel!!.mySong.value!!.timeNow}")
 
-                            checkposition(model!!.mediaPlayer.currentPosition.toLong())
-                            changeLyric()
+                                checkposition(songModel!!.mediaPlayer.currentPosition.toLong())
+                                changeLyric()
 
-                            Log.d(TAG, "position : $position")
+                                Log.d(TAG, "position : ${songModel!!.position}")
 
-                        } catch (e: Exception) {
-                            sb!!.progress = 0
-                        }
+                            } catch (e: Exception) {
+                                songModel!!.progress.value = 0
+                            }
                     }
                 }, 0)
 
@@ -172,7 +184,7 @@ class MainActivity : AppCompatActivity() {
             lyricList.add(get[1])
         }
 
-        maxlength = timeList.size - 1
+        songModel!!.maxlength = timeList.size - 1
 
         Log.d(TAG, "timeList : $timeList, lyricList : $lyricList")
     }
@@ -192,45 +204,46 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun changeLyric(){
-        val data = model!!.mySong.value
-        if(position == 0){
-            data!!.lyric1 = lyricList[position]
-            data.lyric2 = lyricList[position + 1]
+        val data = songModel!!.mySong.value
+        Log.d(TAG, "model position : ${songModel!!.position}, max length : ${songModel!!.maxlength}")
+        if(songModel!!.position == 0){
+            data!!.lyric1 = lyricList[songModel!!.position]
+            data.lyric2 = lyricList[songModel!!.position + 1]
 
-            tv_lyrics1.setTextColor(ContextCompat.getColor(applicationContext, R.color.transparentGrey))
-            tv_lyrics2.setTextColor(ContextCompat.getColor(applicationContext, R.color.transparentGrey))
-
-            tv_lyrics1.setTypeface(Typeface.DEFAULT)
-
-        }else if(position > maxlength){
-            data!!.lyric1 = lyricList[maxlength]
+        }else if(songModel!!.position > songModel!!.maxlength){
+            data!!.lyric1 = lyricList[songModel!!.maxlength]
             data.lyric2 = ""
 
-            tv_lyrics1.setTextColor(ContextCompat.getColor(applicationContext, R.color.Black))
-            tv_lyrics1.setTypeface(Typeface.DEFAULT_BOLD)
-
         }else{
-            data!!.lyric1 = lyricList[position-1]
-            data.lyric2 = lyricList[position]
-
-            tv_lyrics1.setTextColor(ContextCompat.getColor(applicationContext, R.color.Black))
-            tv_lyrics1.setTypeface(Typeface.DEFAULT_BOLD)
+            data!!.lyric1 = lyricList[songModel!!.position-1]
+            data.lyric2 = lyricList[songModel!!.position]
         }
-        model!!.mySong.value = data!!
+        songModel!!.mySong.value = data!!
     }
 
     private fun checkposition(time : Long) {
-        if(time < timeList[maxlength]){
-            for(i in 0 until maxlength + 1){
+        if(time < timeList[songModel!!.maxlength]){
+            for(i in 0 until songModel!!.maxlength + 1){
                 if(time < timeList[i]){
-                    position = i
+                    songModel!!.position = i
                     Log.d(TAG, "position changed ! : $i, $time, ${timeList[i]}")
                     break
                 }
             }
 
-        }else if(time >= timeList[maxlength]){
-            position = maxlength + 1
+        }else if(time >= timeList[songModel!!.maxlength]){
+            songModel!!.position = songModel!!.maxlength + 1
         }
+    }
+
+    private fun goLyric() {
+        val intent = Intent(this, LyricActivity::class.java)
+        intent.putExtra("title", songModel!!.mySong.value!!.title)
+        Log.d(TAG, "sending intent : ${songModel!!.mySong.value!!.title}")
+        intent.putExtra("singer", songModel!!.mySong.value!!.singer)
+        intent.putExtra("album", songModel!!.mySong.value!!.album)
+        intent.putExtra("lyricList", lyricList)
+        intent.putExtra("timeList", timeList)
+        startActivity(intent)
     }
 }
